@@ -236,20 +236,28 @@ async function api(url, opts={}, attempt=0){
 
 /* ---------------- Forms helpers ---------------- */
 const P = () => CONFIG.PROJECT_ID;
-const layoutCache = new Map();   // layoutId -> Promise<{uid,schema,section}|null>
+const layoutCache = new Map();   // layoutId -> Promise<Array<{uid,schema,section,sigIds}>>
 
-async function findGpsField(layoutId){
+/* Every section that has a "GPS location" text item gets its own GPS slot.
+   The slot is tied to the signature item(s) in the SAME section, so in a
+   multi-stage form (e.g. PTW) each stage's GPS field only receives the
+   location of the person who signed that stage. */
+async function findGpsFields(layoutId){
   if(layoutCache.has(layoutId)) return layoutCache.get(layoutId);
   const job = (async () => {
     const lay = await api(`${FORMS}/v1/projects/${P()}/layouts/${layoutId}`);
     const want = CONFIG.GPS_FIELD_LABEL.trim().toLowerCase();
+    const found = [];
     for(const s of (lay.sections || [])){
       const sec = await api(`${FORMS}/v2/projects/${P()}/layouts/${layoutId}/sections/${s.uid}`);
-      const item = (sec.sectionItems || []).find(i =>
+      const items = sec.sectionItems || [];
+      const gps = items.find(i =>
         i.type === "field" && i.valueName === "textVal" && String(i.label||"").trim().toLowerCase() === want);
-      if(item) return { uid:item.uid, schema:item.schema, section:s.label };
+      if(!gps) continue;
+      const sigIds = items.filter(i => i.valueName === "svgVal").flatMap(i => [i.uid, i.schema]).filter(Boolean);
+      found.push({ uid:gps.uid, schema:gps.schema, section:s.label, sigIds });
     }
-    return null;
+    return found;
   })();
   layoutCache.set(layoutId, job);
   return job;
@@ -349,20 +357,26 @@ async function processForm(form, since, stampTxt){
   try{
     const layoutId = form.nativeForm && form.nativeForm.layoutId;
     if(!layoutId) return addResult(form, "skip", "PDF form");
-    const field = await findGpsField(layoutId);
-    if(!field) return addResult(form, "skip", "No GPS field");
+    const fields = await findGpsFields(layoutId);
+    if(!fields.length) return addResult(form, "skip", "No GPS field");
     const vals = await formValues(form.id);
-    const gpsIds = [field.uid, field.schema];
-    if(vals.some(v => gpsIds.includes(v.fieldId) && (v.textVal || "").trim()))
-      return addResult(form, "done", "Already stamped");
-    const sigs = vals.filter(v => v.svgVal);
-    if(!sigs.length) return addResult(form, "skip", "Not signed yet");
-    if(CONFIG.ONLY_MY_SIGNATURES){
-      const mine = sigs.find(v => v.updatedBy === me.sub && new Date(v.updatedAt) >= since);
-      if(!mine) return addResult(form, "skip", "Signed by someone else");
+
+    let stamped = 0, already = 0, unsigned = 0, other = 0;
+    for(const field of fields){
+      const gpsIds = [field.uid, field.schema];
+      if(vals.some(v => gpsIds.includes(v.fieldId) && (v.textVal || "").trim())){ already++; continue; }
+      // signatures in this section (fallback: any signature, if the section has none)
+      const sigs = vals.filter(v => v.svgVal && (!field.sigIds.length || field.sigIds.includes(v.fieldId)));
+      if(!sigs.length){ unsigned++; continue; }
+      if(CONFIG.ONLY_MY_SIGNATURES &&
+         !sigs.some(v => v.updatedBy === me.sub && new Date(v.updatedAt) >= since)){ other++; continue; }
+      await writeGps(form.id, field, stampTxt);
+      stamped++;
     }
-    await writeGps(form.id, field, stampTxt);
-    addResult(form, "ok", "Stamped ✓");
+    if(stamped) return addResult(form, "ok", fields.length > 1 ? `Stamped ✓ (${stamped})` : "Stamped ✓");
+    if(already && !unsigned && !other) return addResult(form, "done", "Already stamped");
+    if(other) return addResult(form, "skip", "Signed by someone else");
+    return addResult(form, "skip", already ? "Already stamped" : "Not signed yet");
   }catch(e){
     if(e instanceof AuthError) throw e;
     addResult(form, "err", e.status === 403 ? "No edit access" : (e.message || "Error").slice(0, 40));
@@ -433,7 +447,10 @@ async function runSetup(){
       for(const t of (j.data || [])){
         if(t.status !== "active") continue;
         let has = "PDF";
-        if(!t.isPdf && t.layoutId){ const f = await findGpsField(t.layoutId); has = f ? `✓ (${esc(f.section)})` : "✗"; }
+        if(!t.isPdf && t.layoutId){
+          const f = await findGpsFields(t.layoutId);
+          has = f.length ? f.map(x => `✓ ${esc(x.section)}${x.sigIds.length ? "" : " <span class='pill warn'>no signature in section</span>"}`).join("<br>") : "✗";
+        }
         rows.push(`<tr><td>${esc(t.name)}<br><code>${esc(t.id)}</code></td><td>${has}</td></tr>`);
       }
       const n = (j.data || []).length;
