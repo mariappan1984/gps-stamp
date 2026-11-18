@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b3d5c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="GPS Stamp">
+<title>GPS Stamp · Forma Forms</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --card:#fff; --ink:#1b2733; --muted:#5f6f7f; --line:#dde3e9;
+    --brand:#0b3d5c; --brand2:#0f6ba8; --ok:#1e8e3e; --warn:#b26a00; --err:#c62828; --skip:#6b7785;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  header{background:var(--brand);color:#fff;padding:14px 16px calc(14px) 16px;
+    padding-top:calc(14px + env(safe-area-inset-top))}
+  header h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.2px}
+  header .sub{opacity:.8;font-size:13px;margin-top:2px}
+  main{max-width:560px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .muted{color:var(--muted);font-size:13px}
+  button{font:inherit;border:0;border-radius:10px;cursor:pointer}
+  .btn{background:var(--brand2);color:#fff;padding:12px 16px;font-weight:600}
+  .btn.secondary{background:#e8eef3;color:var(--brand)}
+  .btn.link{background:none;color:var(--brand2);padding:4px 0;font-weight:500}
+  .btn:disabled{opacity:.55;cursor:default}
+  .big{width:100%;padding:22px 16px;font-size:19px;border-radius:14px;
+    background:linear-gradient(180deg,#1478bd,#0f6ba8);box-shadow:0 2px 0 #0b4f7d}
+  .big small{display:block;font-weight:400;font-size:13px;opacity:.9;margin-top:4px}
+  .pos{font-variant-numeric:tabular-nums}
+  .pos a{color:var(--brand2);word-break:break-all}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}
+  .pill.ok{background:#e6f4ea;color:var(--ok)} .pill.warn{background:#fff4e0;color:var(--warn)}
+  .pill.err{background:#fdecea;color:var(--err)} .pill.skip{background:#eef1f4;color:var(--skip)}
+  .bar{height:6px;background:#e8eef3;border-radius:6px;overflow:hidden;margin:10px 0 4px}
+  .bar>i{display:block;height:100%;width:0;background:var(--brand2);transition:width .2s}
+  ul.results{list-style:none;margin:8px 0 0;padding:0;max-height:52vh;overflow:auto}
+  ul.results li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+  ul.results li .name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;margin-top:10px}
+  .summary div{background:#f6f8fa;border-radius:8px;padding:8px 2px}
+  .summary b{display:block;font-size:18px}
+  .msg{padding:10px 12px;border-radius:10px;font-size:14px;margin-top:10px}
+  .msg.err{background:#fdecea;color:var(--err)} .msg.warn{background:#fff4e0;color:var(--warn)}
+  .msg.ok{background:#e6f4ea;color:var(--ok)}
+  .hidden{display:none!important}
+  table.setup{width:100%;border-collapse:collapse;font-size:13px}
+  table.setup td,table.setup th{border-top:1px solid var(--line);padding:6px 4px;text-align:left;vertical-align:top}
+  code{font-size:12px;background:#f1f4f7;padding:1px 4px;border-radius:4px;word-break:break-all}
+</style>
+</head>
+<body>
+<header>
+  <h1>📍 GPS Stamp</h1>
+  <div class="sub" id="hdrProject">Forma Build · Forms</div>
+</header>
+
+<main>
+  <!-- Config warning -->
+  <div id="cfgWarn" class="card hidden">
+    <b>Setup needed</b>
+    <div class="muted" style="margin-top:6px">Open this file and fill in <code>CLIENT_ID</code> and <code>PROJECT_ID</code> in the CONFIG block, then reload.</div>
+  </div>
+
+  <!-- Sign-in -->
+  <section id="vSignin" class="card hidden">
+    <p style="margin-top:0">Sign in with your Autodesk account (same login as the Forma app).</p>
+    <button class="btn" id="btnSignin" style="width:100%">Sign in with Autodesk</button>
+    <div id="signinMsg"></div>
+  </section>
+
+  <!-- Main -->
+  <section id="vMain" class="hidden">
+    <div class="card">
+      <div class="row">
+        <div>
+          <div id="meName" style="font-weight:600">—</div>
+          <div class="muted" id="meEmail"></div>
+        </div>
+        <button class="btn link" id="btnSignout">Sign out</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <button class="btn big" id="btnStamp">
+        Stamp my location
+        <small id="stampHint">on forms I signed in the last 12 h</small>
+      </button>
+      <div id="posBox" class="pos hidden" style="margin-top:14px"></div>
+      <div id="mainMsg"></div>
+    </div>
+
+    <div class="card hidden" id="resCard">
+      <div class="row"><b>Forms</b><span class="muted" id="progTxt"></span></div>
+      <div class="bar"><i id="progBar"></i></div>
+      <div class="summary">
+        <div><b id="nOk">0</b><span class="muted">Stamped</span></div>
+        <div><b id="nDone">0</b><span class="muted">Already</span></div>
+        <div><b id="nSkip">0</b><span class="muted">Skipped</span></div>
+        <div><b id="nErr">0</b><span class="muted">Errors</span></div>
+      </div>
+      <ul class="results" id="resList"></ul>
+    </div>
+
+    <div class="card hidden" id="setupCard">
+      <div class="row"><b>Setup check (admin)</b><button class="btn secondary" id="btnSetup">Run</button></div>
+      <div class="muted" style="margin-top:6px">Lists form templates and whether each has a text item labelled “<span id="lblName"></span>”.</div>
+      <div id="setupOut" style="margin-top:10px"></div>
+    </div>
+
+    <p class="muted" style="text-align:center">Tip: add this page to your home screen for one-tap use.</p>
+  </section>
+</main>
+
+<script>
+/* =====================================================================
+   CONFIG: fill these in before hosting
+   ===================================================================== */
+const CONFIG = {
+  CLIENT_ID:      "tGbsAYY2w2YlbRvt7gfAThPubgtpoYJ0G5NRs0ZehdFxGUWI",   // APS app (type: Desktop, Mobile, Single-Page App)
+  CALLBACK_URL:   "",                           // blank = this page's own URL (must match APS app exactly)
+  PROJECT_ID:     "3e565b5d-618d-420b-8315-4e3c0f03b625",      // Forma project ID WITHOUT the "b." prefix
+  PROJECT_NAME:   "NMOHB PROJECT",
+  GPS_FIELD_LABEL:"GPS location",               // exact label of the Text item added to the template
+  TEMPLATE_IDS:   [],                           // [] = any template that has the GPS field
+  LOOKBACK_HOURS: 12,                           // only forms signed within this window
+  ONLY_MY_SIGNATURES: true,                     // stamp only forms where *this user* signed
+  MAX_ACCURACY_M: 100,                          // refuse to stamp if phone GPS is worse than this
+  SITE: null,                                   // optional geofence, e.g. { lat:1.30215, lon:103.84552, radiusM:300 }
+  TIMEZONE:       "Asia/Singapore",
+  CONCURRENCY:    4
+};
+/* ===================================================================== */
+
+const APS = "https://developer.api.autodesk.com";
+const AUTH_URL  = APS + "/authentication/v2/authorize";
+const TOKEN_URL = APS + "/authentication/v2/token";
+const USERINFO  = "https://api.userprofile.autodesk.com/userinfo";
+const SCOPES    = "data:read data:write";
+const FORMS     = `${APS}/construction/forms`;
+const CALLBACK  = CONFIG.CALLBACK_URL || (location.origin + location.pathname);
+const ADMIN     = new URLSearchParams(location.search).has("admin");
+
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+const sess = {
+  get(k){ try{ return sessionStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ sessionStorage.setItem(k,v); }catch(e){} },
+  del(k){ try{ sessionStorage.removeItem(k); }catch(e){} }
+};
+function msg(el, text, kind="err"){ $(el).innerHTML = text ? `<div class="msg ${kind}">${text}</div>` : ""; }
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------------- OAuth (3-legged, PKCE: no client secret) ---------------- */
+function b64url(bytes){
+  return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+async function pkce(){
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+  return { verifier, challenge };
+}
+async function signIn(){
+  const { verifier, challenge } = await pkce();
+  const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
+  sess.set("pkce_verifier", verifier); sess.set("pkce_state", state);
+  const q = new URLSearchParams({
+    response_type:"code", client_id:CONFIG.CLIENT_ID, redirect_uri:CALLBACK,
+    scope:SCOPES, code_challenge:challenge, code_challenge_method:"S256", state
+  });
+  location.href = `${AUTH_URL}?${q}`;
+}
+async function tokenRequest(params){
+  const r = await fetch(TOKEN_URL, {
+    method:"POST",
+    headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+    body:new URLSearchParams({ client_id:CONFIG.CLIENT_ID, ...params })
+  });
+  const j = await r.json().catch(() => ({}));
+  if(!r.ok) throw new Error(j.error_description || j.developerMessage || `Token error ${r.status}`);
+  const tok = { access:j.access_token, refresh:j.refresh_token || null, exp:Date.now() + (j.expires_in - 60) * 1000 };
+  store.set("aps_tok", tok);
+  return tok;
+}
+async function handleRedirect(){
+  const p = new URLSearchParams(location.search);
+  if(!p.has("code") && !p.has("error")) return;
+  const clean = location.pathname + (ADMIN ? "?admin" : "");
+  if(p.has("error")){ history.replaceState(null,"",clean); throw new Error(p.get("error_description") || p.get("error")); }
+  if(p.get("state") !== sess.get("pkce_state")){ history.replaceState(null,"",clean); throw new Error("Sign-in state mismatch. Please try again."); }
+  await tokenRequest({ grant_type:"authorization_code", code:p.get("code"), redirect_uri:CALLBACK, code_verifier:sess.get("pkce_verifier") });
+  sess.del("pkce_verifier"); sess.del("pkce_state");
+  history.replaceState(null,"",clean);
+}
+async function accessToken(){
+  let t = store.get("aps_tok");
+  if(!t) return null;
+  if(Date.now() < t.exp) return t.access;
+  if(t.refresh){
+    try{ t = await tokenRequest({ grant_type:"refresh_token", refresh_token:t.refresh }); return t.access; }
+    catch(e){ /* fall through */ }
+  }
+  store.del("aps_tok");
+  return null;
+}
+function signOut(){ store.del("aps_tok"); store.del("aps_me"); location.reload(); }
+
+/* ---------------- API helper (auth, 429 retry) ---------------- */
+class AuthError extends Error{}
+async function api(url, opts={}, attempt=0){
+  const tok = await accessToken();
+  if(!tok) throw new AuthError("Signed out");
+  const r = await fetch(url, { ...opts, headers:{ Authorization:`Bearer ${tok}`, "Content-Type":"application/json", ...(opts.headers||{}) } });
+  if(r.status === 401){ store.del("aps_tok"); throw new AuthError("Session expired. Please sign in again."); }
+  if(r.status === 429 && attempt < 4){
+    const wait = (parseFloat(r.headers.get("Retry-After")) || 2 ** attempt) * 1000;
+    await sleep(wait); return api(url, opts, attempt + 1);
+  }
+  if(r.status === 204) return null;
+  const j = await r.json().catch(() => null);
+  if(!r.ok){
+    const e = new Error((j && (j.detail || j.message || j.title || j.developerMessage)) || `HTTP ${r.status}`);
+    e.status = r.status; throw e;
+  }
+  return j;
+}
+
+/* ---------------- Forms helpers ---------------- */
+const P = () => CONFIG.PROJECT_ID;
+const layoutCache = new Map();   // layoutId -> Promise<{uid,schema,section}|null>
+
+async function findGpsField(layoutId){
+  if(layoutCache.has(layoutId)) return layoutCache.get(layoutId);
+  const job = (async () => {
+    const lay = await api(`${FORMS}/v1/projects/${P()}/layouts/${layoutId}`);
+    const want = CONFIG.GPS_FIELD_LABEL.trim().toLowerCase();
+    for(const s of (lay.sections || [])){
+      const sec = await api(`${FORMS}/v2/projects/${P()}/layouts/${layoutId}/sections/${s.uid}`);
+      const item = (sec.sectionItems || []).find(i =>
+        i.type === "field" && i.valueName === "textVal" && String(i.label||"").trim().toLowerCase() === want);
+      if(item) return { uid:item.uid, schema:item.schema, section:s.label };
+    }
+    return null;
+  })();
+  layoutCache.set(layoutId, job);
+  return job;
+}
+
+async function listCandidateForms(since){
+  const out = [];
+  const templates = CONFIG.TEMPLATE_IDS.length ? CONFIG.TEMPLATE_IDS : [null];
+  for(const tpl of templates){
+    let offset = 0;
+    for(;;){
+      const q = new URLSearchParams({ limit:"50", offset:String(offset), updatedAfter:since.toISOString(), statuses:"inProgress" });
+      if(tpl) q.set("templateId", tpl);
+      const j = await api(`${FORMS}/v2/projects/${P()}/forms?${q}`);
+      for(const f of (j.data || [])) if(["inProgress","draft"].includes(f.status)) out.push(f);
+      const n = (j.data || []).length;
+      if(!j.pagination || !j.pagination.nextUrl || n === 0) break;
+      offset += n;
+    }
+  }
+  return out;
+}
+
+async function formValues(formId){
+  const all = []; let offset = 0;
+  for(;;){
+    const j = await api(`${FORMS}/v2/projects/${P()}/forms/${formId}/values?limit=100&offset=${offset}`);
+    all.push(...(j.data || []));
+    const n = (j.data || []).length;
+    if(!j.pagination || !j.pagination.nextUrl || n === 0) break;
+    offset += n;
+  }
+  return all.filter(v => !v.deleted);
+}
+
+async function writeGps(formId, field, text){
+  const ids = [...new Set([field.uid, field.schema].filter(Boolean))];
+  let lastErr;
+  for(const fieldId of ids){
+    try{
+      await api(`${FORMS}/v2/projects/${P()}/forms/${formId}/values:batch-update?excludeFormResponse=true`, {
+        method:"PUT", body:JSON.stringify({ customValues:[{ fieldId, textVal:text }] })
+      });
+      return;
+    }catch(e){
+      lastErr = e;
+      if(e instanceof AuthError || ![400,404,422].includes(e.status)) throw e;
+    }
+  }
+  throw lastErr;
+}
+
+/* ---------------- GPS ---------------- */
+function getPosition(){
+  return new Promise((res, rej) => {
+    if(!("geolocation" in navigator)) return rej(new Error("This browser has no GPS access."));
+    navigator.geolocation.getCurrentPosition(res, e => {
+      rej(new Error(e.code === 1 ? "Location permission denied. Allow location for this page in your phone settings."
+                 : e.code === 3 ? "GPS timed out. Move to open sky and try again."
+                 : "Could not get location."));
+    }, { enableHighAccuracy:true, timeout:25000, maximumAge:0 });
+  });
+}
+function distanceM(a, b){
+  const R = 6371000, toR = d => d * Math.PI / 180;
+  const dLat = toR(b.lat - a.lat), dLon = toR(b.lon - a.lon);
+  const h = Math.sin(dLat/2)**2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function fmtTime(d){
+  return new Intl.DateTimeFormat("en-GB", { timeZone:CONFIG.TIMEZONE, day:"2-digit", month:"short", year:"numeric",
+    hour:"2-digit", minute:"2-digit", hour12:false, timeZoneName:"short" }).format(d);
+}
+function buildStamp(p){
+  const lat = p.lat.toFixed(6), lon = p.lon.toFixed(6);
+  const url = `https://www.google.com/maps?q=${lat},${lon}`;
+  let txt = `${lat}, ${lon} (±${Math.round(p.acc)} m) | ${fmtTime(p.time)} | ${url}`;
+  if(p.site) txt += p.site.inside ? ` | ON SITE` : ` | OUTSIDE SITE (${Math.round(p.site.dist)} m)`;
+  return { txt, url };
+}
+
+/* ---------------- Main flow ---------------- */
+let me = null, running = false;
+const counts = { ok:0, done:0, skip:0, err:0 };
+
+function addResult(form, kind, label){
+  counts[kind]++;
+  $("nOk").textContent = counts.ok; $("nDone").textContent = counts.done;
+  $("nSkip").textContent = counts.skip; $("nErr").textContent = counts.err;
+  const pill = { ok:"ok", done:"skip", skip:"skip", err:"err" }[kind];
+  const li = document.createElement("li");
+  li.innerHTML = `<span class="name">#${esc(form.formNum)} ${esc(form.name || "")}</span><span class="pill ${pill}">${esc(label)}</span>`;
+  $("resList").prepend(li);
+}
+
+async function processForm(form, since, stampTxt){
+  try{
+    const layoutId = form.nativeForm && form.nativeForm.layoutId;
+    if(!layoutId) return addResult(form, "skip", "PDF form");
+    const field = await findGpsField(layoutId);
+    if(!field) return addResult(form, "skip", "No GPS field");
+    const vals = await formValues(form.id);
+    const gpsIds = [field.uid, field.schema];
+    if(vals.some(v => gpsIds.includes(v.fieldId) && (v.textVal || "").trim()))
+      return addResult(form, "done", "Already stamped");
+    const sigs = vals.filter(v => v.svgVal);
+    if(!sigs.length) return addResult(form, "skip", "Not signed yet");
+    if(CONFIG.ONLY_MY_SIGNATURES){
+      const mine = sigs.find(v => v.updatedBy === me.sub && new Date(v.updatedAt) >= since);
+      if(!mine) return addResult(form, "skip", "Signed by someone else");
+    }
+    await writeGps(form.id, field, stampTxt);
+    addResult(form, "ok", "Stamped ✓");
+  }catch(e){
+    if(e instanceof AuthError) throw e;
+    addResult(form, "err", e.status === 403 ? "No edit access" : (e.message || "Error").slice(0, 40));
+  }
+}
+
+async function runStamp(){
+  if(running) return;
+  running = true; $("btnStamp").disabled = true; msg("mainMsg", "");
+  Object.keys(counts).forEach(k => counts[k] = 0);
+  ["nOk","nDone","nSkip","nErr"].forEach(id => $(id).textContent = "0");
+  $("resList").innerHTML = ""; $("progBar").style.width = "0"; $("progTxt").textContent = "";
+  try{
+    $("posBox").classList.remove("hidden");
+    $("posBox").innerHTML = `<span class="muted">Getting GPS fix…</span>`;
+    const g = await getPosition();
+    const p = { lat:g.coords.latitude, lon:g.coords.longitude, acc:g.coords.accuracy, time:new Date(g.timestamp || Date.now()) };
+    if(CONFIG.SITE){
+      const dist = distanceM(p, CONFIG.SITE);
+      p.site = { dist, inside: dist <= CONFIG.SITE.radiusM };
+    }
+    const { txt, url } = buildStamp(p);
+    const accPill = p.acc <= CONFIG.MAX_ACCURACY_M ? `<span class="pill ok">±${Math.round(p.acc)} m</span>` : `<span class="pill err">±${Math.round(p.acc)} m</span>`;
+    const sitePill = p.site ? (p.site.inside ? ` <span class="pill ok">On site</span>` : ` <span class="pill warn">Outside site · ${Math.round(p.site.dist)} m</span>`) : "";
+    $("posBox").innerHTML = `<div><b>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}</b> ${accPill}${sitePill}</div>
+      <div class="muted">${esc(fmtTime(p.time))}</div>
+      <div style="margin-top:4px"><a href="${url}" target="_blank" rel="noopener">Open in Google Maps</a></div>`;
+    if(p.acc > CONFIG.MAX_ACCURACY_M){
+      msg("mainMsg", `GPS accuracy is ±${Math.round(p.acc)} m (limit ${CONFIG.MAX_ACCURACY_M} m). Step outside or wait a few seconds, then tap again.`, "warn");
+      return;
+    }
+
+    $("resCard").classList.remove("hidden");
+    $("progTxt").textContent = "Finding your forms…";
+    const since = new Date(Date.now() - CONFIG.LOOKBACK_HOURS * 3600 * 1000);
+    const forms = await listCandidateForms(since);
+    if(!forms.length){ $("progTxt").textContent = "No open forms updated in the window."; return; }
+
+    let done = 0, idx = 0;
+    const tick = () => { $("progTxt").textContent = `${done} / ${forms.length}`; $("progBar").style.width = `${(done / forms.length) * 100}%`; };
+    tick();
+    const worker = async () => {
+      while(idx < forms.length){
+        const f = forms[idx++];
+        await processForm(f, since, txt);
+        done++; tick();
+      }
+    };
+    await Promise.all(Array.from({ length:Math.min(CONFIG.CONCURRENCY, forms.length) }, worker));
+    msg("mainMsg", counts.ok ? `Stamped ${counts.ok} form${counts.ok > 1 ? "s" : ""}.` : "Nothing new to stamp.", counts.err ? "warn" : "ok");
+  }catch(e){
+    if(e instanceof AuthError){ showSignin(e.message); return; }
+    msg("mainMsg", esc(e.message || String(e)));
+  }finally{
+    running = false; $("btnStamp").disabled = false;
+  }
+}
+
+/* ---------------- Admin setup check ---------------- */
+async function runSetup(){
+  const out = $("setupOut");
+  out.innerHTML = `<span class="muted">Checking…</span>`;
+  try{
+    const rows = [];
+    let offset = 0;
+    for(;;){
+      const j = await api(`${FORMS}/v1/projects/${P()}/form-templates?limit=50&offset=${offset}`);
+      for(const t of (j.data || [])){
+        if(t.status !== "active") continue;
+        let has = "PDF";
+        if(!t.isPdf && t.layoutId){ const f = await findGpsField(t.layoutId); has = f ? `✓ (${esc(f.section)})` : "✗"; }
+        rows.push(`<tr><td>${esc(t.name)}<br><code>${esc(t.id)}</code></td><td>${has}</td></tr>`);
+      }
+      const n = (j.data || []).length;
+      if(!j.pagination || !j.pagination.nextUrl || n === 0) break;
+      offset += n;
+    }
+    out.innerHTML = `<div class="muted">Your user ID: <code>${esc(me.sub)}</code></div>
+      <table class="setup"><tr><th>Template / ID</th><th>GPS field</th></tr>${rows.join("") || "<tr><td colspan=2>No templates</td></tr>"}</table>`;
+  }catch(e){
+    if(e instanceof AuthError) return showSignin(e.message);
+    out.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+  }
+}
+
+/* ---------------- Boot ---------------- */
+function showSignin(text){
+  $("vMain").classList.add("hidden"); $("vSignin").classList.remove("hidden");
+  msg("signinMsg", text ? esc(text) : "", "warn");
+}
+async function loadMe(){
+  const cached = store.get("aps_me");
+  if(cached && cached.sub) return cached;
+  const u = await api(USERINFO);
+  const m = { sub:u.sub, name:u.name || [u.given_name, u.family_name].filter(Boolean).join(" ") || u.preferred_username, email:u.email };
+  store.set("aps_me", m);
+  return m;
+}
+async function boot(){
+  $("hdrProject").textContent = `${CONFIG.PROJECT_NAME} · Forms`;
+  $("stampHint").textContent = `on forms I signed in the last ${CONFIG.LOOKBACK_HOURS} h`;
+  $("lblName").textContent = CONFIG.GPS_FIELD_LABEL;
+  if(/PASTE_/.test(CONFIG.CLIENT_ID + CONFIG.PROJECT_ID)){ $("cfgWarn").classList.remove("hidden"); return; }
+  if(!window.isSecureContext){ msg("signinMsg", "This page must be served over HTTPS for GPS to work."); }
+
+  $("btnSignin").onclick = signIn;
+  $("btnSignout").onclick = signOut;
+  $("btnStamp").onclick = runStamp;
+  $("btnSetup").onclick = runSetup;
+
+  try{ await handleRedirect(); }catch(e){ return showSignin(e.message); }
+  if(!(await accessToken())) return showSignin();
+  try{ me = await loadMe(); }catch(e){ return showSignin(e instanceof AuthError ? e.message : "Could not load your profile: " + e.message); }
+
+  $("meName").textContent = me.name || "Signed in";
+  $("meEmail").textContent = me.email || "";
+  $("vSignin").classList.add("hidden"); $("vMain").classList.remove("hidden");
+  if(ADMIN) $("setupCard").classList.remove("hidden");
+}
+boot();
+</script>
+</body>
+</html>
