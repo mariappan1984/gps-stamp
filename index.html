@@ -121,8 +121,8 @@
    CONFIG: fill these in before hosting
    ===================================================================== */
 const CONFIG = {
-  CLIENT_ID:      "tGbsAYY2w2YlbRvt7gfAThPubgtpoYJ0G5NRs0ZehdFxGUWI",   // APS app (type: Desktop, Mobile, Single-Page App)
-  CALLBACK_URL:   "https://mariappan1984.github.io/gps-stamp/",        // blank = this page's own URL (must match APS app exactly)
+  CLIENT_ID:      "tGbsAYY2w2YlbRvt7gfAThPubgtpoYJ0G5NRs0ZehdFx",   // APS app (type: Desktop, Mobile, Single-Page App)
+  CALLBACK_URL:   "https://mariappan1984.github.io/gps-stamp/",                           // blank = this page's own URL (must match APS app exactly)
   PROJECT_ID:     "3e565b5d-618d-420b-8315-4e3c0f03b625",      // Forma project ID WITHOUT the "b." prefix
   PROJECT_NAME:   "NMOHB PROJECT",
   GPS_FIELD_LABEL:"GPS location",               // exact label of the Text item added to the template
@@ -331,11 +331,18 @@ function fmtTime(d){
   return new Intl.DateTimeFormat("en-GB", { timeZone:CONFIG.TIMEZONE, day:"2-digit", month:"short", year:"numeric",
     hour:"2-digit", minute:"2-digit", hour12:false, timeZoneName:"short" }).format(d);
 }
+/* Plain ASCII only: Forma's PDF report generator can fail on symbols such as ± or |. */
+function plainTime(d){
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone:CONFIG.TIMEZONE,
+    day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit", hour12:false })
+    .formatToParts(d).map(x => [x.type, x.value]));
+  return `${parts.day}-${parts.month}-${parts.year} ${parts.hour}:${parts.minute}`;
+}
 function buildStamp(p){
   const lat = p.lat.toFixed(6), lon = p.lon.toFixed(6);
-  const url = `https://www.google.com/maps?q=${lat},${lon}`;
-  let txt = `${lat}, ${lon} (±${Math.round(p.acc)} m) | ${fmtTime(p.time)} | ${url}`;
-  if(p.site) txt += p.site.inside ? ` | ON SITE` : ` | OUTSIDE SITE (${Math.round(p.site.dist)} m)`;
+  const url = `https://maps.google.com/?q=${lat},${lon}`;
+  let txt = `${lat}, ${lon} (+/-${Math.round(p.acc)}m) ${plainTime(p.time)} ${url}`;
+  if(p.site) txt += p.site.inside ? ` ON SITE` : ` OUTSIDE SITE ${Math.round(p.site.dist)}m`;
   return { txt, url };
 }
 
@@ -361,7 +368,7 @@ async function processForm(form, since, stampTxt){
     if(!fields.length) return addResult(form, "skip", "No GPS field");
     const vals = await formValues(form.id);
 
-    let stamped = 0, already = 0, unsigned = 0, other = 0;
+    let stamped = 0, already = 0, unsigned = 0, other = 0, locked = 0;
     for(const field of fields){
       const gpsIds = [field.uid, field.schema];
       if(vals.some(v => gpsIds.includes(v.fieldId) && (v.textVal || "").trim())){ already++; continue; }
@@ -370,16 +377,23 @@ async function processForm(form, since, stampTxt){
       if(!sigs.length){ unsigned++; continue; }
       if(CONFIG.ONLY_MY_SIGNATURES &&
          !sigs.some(v => v.updatedBy === me.sub && new Date(v.updatedAt) >= since)){ other++; continue; }
-      await writeGps(form.id, field, stampTxt);
-      stamped++;
+      try{
+        await writeGps(form.id, field, stampTxt);
+        stamped++;
+      }catch(e){
+        if(e instanceof AuthError) throw e;
+        if(e.status === 403 || /permission/i.test(e.message || "")){ locked++; continue; }  // section already submitted
+        throw e;
+      }
     }
     if(stamped) return addResult(form, "ok", fields.length > 1 ? `Stamped ✓ (${stamped})` : "Stamped ✓");
+    if(locked) return addResult(form, "err", "Section already submitted. Tap BEFORE submitting");
     if(already && !unsigned && !other) return addResult(form, "done", "Already stamped");
     if(other) return addResult(form, "skip", "Signed by someone else");
     return addResult(form, "skip", already ? "Already stamped" : "Not signed yet");
   }catch(e){
     if(e instanceof AuthError) throw e;
-    addResult(form, "err", e.status === 403 ? "No edit access" : (e.message || "Error").slice(0, 40));
+    addResult(form, "err", e.status === 403 ? "Section already submitted. Tap BEFORE submitting" : (e.message || "Error").slice(0, 50));
   }
 }
 
