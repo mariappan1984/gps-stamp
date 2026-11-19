@@ -121,9 +121,9 @@
    CONFIG: fill these in before hosting
    ===================================================================== */
 const CONFIG = {
-  CLIENT_ID:      "tGbsAYY2w2YlbRvt7gfAThPubgtpoYJ0G5NRs0ZehdFxGUWI",   // APS app (type: Desktop, Mobile, Single-Page App)
+  CLIENT_ID:      "PASTE_APS_CLIENT_ID_HEREtGbsAYY2w2YlbRvt7gfAThPubgtpoYJ0G5NRs0ZehdFxGUWI",   // APS app (type: Desktop, Mobile, Single-Page App)
   CALLBACK_URL:   "https://mariappan1984.github.io/gps-stamp/",                           // blank = this page's own URL (must match APS app exactly)
-  PROJECT_ID:     "3e565b5d-618d-420b-8315-4e3c0f03b625",      // Forma project ID WITHOUT the "b." prefix
+  PROJECT_ID:     "PASTE_PROJECT_ID_HERE",      // Forma project ID WITHOUT the "b." prefix
   PROJECT_NAME:   "NMOHB PROJECT",
   GPS_FIELD_LABEL:"GPS location",               // exact label of the Text item added to the template
   TEMPLATE_IDS:   [],                           // [] = any template that has the GPS field
@@ -132,7 +132,8 @@ const CONFIG = {
   MAX_ACCURACY_M: 100,                          // refuse to stamp if phone GPS is worse than this
   SITE: null,                                   // optional geofence, e.g. { lat:1.30215, lon:103.84552, radiusM:300 }
   TIMEZONE:       "Asia/Singapore",
-  CONCURRENCY:    4
+  CONCURRENCY:    4,
+  AUTO_SECONDS:   30                            // Auto mode: stamp on open + every N seconds while page is visible (0 = off)
 };
 /* ===================================================================== */
 
@@ -512,6 +513,18 @@ async function boot(){
   $("meEmail").textContent = me.email || "";
   $("vSignin").classList.add("hidden"); $("vMain").classList.remove("hidden");
   if(ADMIN) $("setupCard").classList.remove("hidden");
+
+  // Auto mode: stamp immediately on open / when the user switches back to this page,
+  // and keep checking while the page stays visible. No button press needed.
+  if(CONFIG.AUTO_SECONDS > 0){
+    $("btnStamp").firstChild.textContent = "Auto-stamp is ON ";
+    $("stampHint").textContent = `Stamps automatically when you open this page (and every ${CONFIG.AUTO_SECONDS}s while open). Tap to stamp now.`;
+    const auto = () => { if(document.visibilityState === "visible") runStamp(); };
+    auto();
+    setInterval(auto, CONFIG.AUTO_SECONDS * 1000);
+    document.addEventListener("visibilitychange", auto);
+    window.addEventListener("focus", auto);
+  }
 }
 boot();
 </script>
